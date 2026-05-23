@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HỆ THỐNG BẢO MẬT // GIAO DIỆN RSA</title>
+    <!-- Sử dụng font chữ phong cách lập trình -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Thư viện kết nối thời gian thực Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.1/socket.io.min.js"></script>
+    <style>
+      /* Khai báo các màu sắc chủ đạo của giao diện Hacker Terminal */
+      :root {
+        --term-green: #00ff41; /* Màu xanh neon chính */
+        --term-dark-green: #008f11; /* Màu xanh đậm cho viền */
+        --term-bg: #0a0a0a; /* Màu nền tối */
+        --term-panel: #111111; /* Màu nền của các khung */
+        --term-alert: #ff003c; /* Màu đỏ cảnh báo */
+        --term-text: #e0e0e0; /* Màu xám trắng cho văn bản phụ */
+      }
+
+      /* Thiết lập giao diện tổng thể */
+      body {
+        background-color: var(--term-bg);
+        color: var(--term-green);
+        font-family: "Fira Code", monospace;
+        margin: 0;
+        padding: 2vh 5vw;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 96vh;
+      }
+
+      /* Hiệu ứng sọc màn hình CRT cũ (Scanline effect) */
+      body::after {
+        content: " ";
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background:
+          linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+          linear-gradient(
+            90deg,
+            rgba(255, 0, 0, 0.06),
+            rgba(0, 255, 0, 0.02),
+            rgba(0, 0, 255, 0.06)
+          );
+        z-index: 2;
+        background-size:
+          100% 2px,
+          3px 100%;
+        pointer-events: none; /* Không cản trở việc click chuột */
+      }
+
+      /* Khung chứa toàn bộ giao diện */
+      .terminal-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* Chia làm 2 cột bằng nhau */
+        gap: 30px;
+        width: 100%;
+        max-width: 1200px;
+        z-index: 3;
+        background: var(--term-panel);
+        border: 1px solid var(--term-dark-green);
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.1);
+        padding: 30px;
+        border-radius: 5px;
+      }
+
+      /* Thanh tiêu đề phía trên cùng */
+      .header-bar {
+        grid-column: 1 / -1; /* Trải dài hết các cột */
+        border-bottom: 2px solid var(--term-dark-green);
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        text-shadow: 0 0 5px var(--term-green);
+      }
+
+      .sys-status {
+        font-size: 0.9rem;
+        text-align: right;
+      }
+
+      .panel-section {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      /* Định dạng nhãn (label) nhập liệu */
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+        color: var(--term-text);
+      }
+
+      label::before {
+        content: "> "; /* Thêm dấu mũi tên trước nhãn */
+        color: var(--term-green);
+      }
+
+      /* Định dạng các ô nhập chữ */
+      input[type="text"],
+      textarea {
+        width: 100%;
+        background: #000;
+        border: 1px solid var(--term-dark-green);
+        color: var(--term-green);
+        padding: 12px;
+        font-family: "Fira Code", monospace;
+        box-sizing: border-box;
+        outline: none;
+        transition: 0.2s;
+      }
+
+      input[type="text"]:focus,
+      textarea:focus {
+        border-color: var(--term-green);
+        box-shadow: 0 0 8px rgba(0, 255, 65, 0.3); /* Sáng viền khi click vào */
+      }
+
+      textarea {
+        height: 120px;
+        resize: vertical;
+      }
+
+      /* Định dạng Nút bấm */
+      .btn {
+        background: transparent;
+        color: var(--term-green);
+        border: 1px solid var(--term-green);
+        padding: 12px 20px;
+        font-family: "Fira Code", monospace;
+        font-weight: bold;
+        cursor: pointer;
+        text-transform: uppercase;
+        transition: all 0.2s ease;
+        width: 100%;
+      }
+
+      .btn:hover {
+        background: var(--term-green);
+        color: #000;
+        box-shadow: 0 0 15px var(--term-green);
+      }
+
+      /* Nút bấm phụ (chọn tệp) */
+      .btn-alt {
+        border-color: var(--term-text);
+        color: var(--term-text);
+      }
+
+      .btn-alt:hover {
+        background: var(--term-text);
+        color: #000;
+        box-shadow: 0 0 15px var(--term-text);
+      }
+
+      /* Khung hiển thị nhật ký (Log) */
+      .output-box {
+        background: #000;
+        border: 1px solid var(--term-dark-green);
+        height: 400px;
+        overflow-y: auto;
+        padding: 15px;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+        line-height: 1.5;
+      }
+
+      /* Tùy chỉnh thanh cuộn (Scrollbar) */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #000;
+        border-left: 1px solid var(--term-dark-green);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--term-dark-green);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--term-green);
+      }
+
+      /* Khu vực tải tệp lên */
+      .file-upload-wrapper {
+        border: 1px dashed var(--term-dark-green);
+        padding: 15px;
+        background: rgba(0, 255, 65, 0.02);
+        text-align: center;
+      }
+
+      input[type="file"] {
+        color: var(--term-text);
+        font-family: inherit;
+      }
+
+      /* Hiệu ứng nhấp nháy cho text */
+      .blink {
+        animation: blinker 1s step-end infinite;
+      }
+      @keyframes blinker {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* Khung hiển thị cho màn hình điện thoại/nhỏ */
+      @media (max-width: 800px) {
+        .terminal-container {
+          grid-template-columns: 1fr;
+        }
+        .output-box {
+          height: 300px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="terminal-container">
+      <!-- Khu vực Tiêu đề & Trạng thái -->
+      <div class="header-bar">
+        <h1>KÊNH GIAO TIẾP BẢO MẬT</h1>
+        <div class="sys-status">
+          <div>
+            MÁY CHỦ:
+            <input
+              type="text"
+              id="host-ip-input"
+              style="
+                width: 130px;
+                height: 20px;
+                padding: 2px;
+                margin-left: 5px;
+                display: inline-block;
+              "
+            />
+          </div>
+          <div>
+            TRẠNG THÁI:
+            <span id="status-text" class="blink">[ ĐANG KHỞI TẠO... ]</span>
+          </div>
+          <div>
+            KẾT NỐI:
+            <span id="handshake-status" style="color: var(--term-alert)"
+              >CHỜ XỬ LÝ</span
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Cột 1: Nhập Liệu (Dữ liệu & Tệp tin) -->
+      <div class="panel-section">
+        <div>
+          <label>DỮ_LIỆU_CẦN_GỬI</label>
+          <textarea
+            id="original-text"
+            placeholder="Nhập nội dung tin nhắn văn bản vào đây..."
+          ></textarea>
+        </div>
+
+        <div>
+          <label>ĐỊNH_DANH_CHỮ_KÝ_RSA</label>
+          <input type="text" id="signature-text" placeholder="vd: ĐẶC_VỤ_007" />
+        </div>
+
+        <!-- Nút gửi văn bản -->
+        <button class="btn" onclick="sendMessage()">
+          [ MÃ HÓA & TRUYỀN TẢI ]
+        </button>
+
+        <!-- Khu vực gửi file -->
+        <div class="file-upload-wrapper">
+          <label>TRUYỀN_TẢI_TỆP_BẢO_MẬT</label>
+          <input
+            type="file"
+            id="file-input"
+            style="margin-bottom: 15px; width: 100%"
+          />
+          <button class="btn btn-alt" onclick="sendFile()">
+            [ TẢI TỆP LÊN ]
+          </button>
+        </div>
+      </div>
+
+      <!-- Cột 2: Hiển thị Kết quả (Nhật ký Hệ thống) -->
+      <div class="panel-section">
+        <label>NHẬT_KÝ_HỆ_THỐNG & KẾT_QUẢ_GIẢI_MÃ</label>
+        <div class="output-box" id="output-box"></div>
+      </div>
+    </div>
+
+    <script>
+      // Khởi tạo kết nối Socket.IO tới Server
+      const socket = io();
+
+      // Lấy các phần tử trên màn hình để thao tác
+      const statusText = document.getElementById("status-text");
+      const outputBox = document.getElementById("output-box");
+      const handshakeStatus = document.getElementById("handshake-status");
+
+      // Tự động điền IP hiện tại của máy vào ô Máy Chủ
+      document.getElementById("host-ip-input").value =
+        window.location.hostname || "127.0.0.1";
+
+      /**
+       * Hàm dùng để in thông báo ra màn hình Nhật Ký (Output Box)
+       * @param {string} message - Nội dung cần in
+       * @param {boolean} isSystem - Nếu là thông báo hệ thống thì in màu xám, nếu là tin nhắn nhận được thì in màu xanh
+       */
+      function logToOutput(message, isSystem = false) {
+        const time = new Date().toLocaleTimeString("vi-VN", { hour12: false });
+        let color = isSystem ? "var(--term-text)" : "var(--term-green)";
+        const separator =
+          "\n<span style='color: var(--term-dark-green);'>------------------------------------------------</span>\n";
+
+        outputBox.innerHTML += `<span style="color: ${color};">[${time}] ${message}</span>${separator}`;
+        // Tự động cuộn xuống dòng mới nhất
+        outputBox.scrollTop = outputBox.scrollHeight;
+      }
+
+      // ----------------------------------------------------
+      // CÁC SỰ KIỆN LẮNG NGHE TỪ SERVER TẢI VỀ
+      // ----------------------------------------------------
+
+      // Nhận thông báo trạng thái chung từ server
+      socket.on("status", function (data) {
+        statusText.innerText = "[ " + data.msg + " ]";
+        logToOutput(`HỆ_THỐNG: ${data.msg}`, true);
+
+        // Đổi màu hiển thị nếu kết nối bảo mật thành công
+        if (
+          data.msg.includes("2 chiều") ||
+          data.msg.includes("sẵn sàng") ||
+          data.msg.includes("ĐA ĐIỂM")
+        ) {
+          statusText.style.color = "var(--term-green)";
+          handshakeStatus.innerText = "ĐÃ BẢO MẬT";
+          handshakeStatus.style.color = "var(--term-green)";
+        } else {
+          statusText.style.color = "var(--term-text)";
+          handshakeStatus.innerText = "TRỰC TUYẾN";
+          handshakeStatus.style.color = "var(--term-text)";
+        }
+      });
+
+      // Nhận cảnh báo lỗi
+      socket.on("error", function (data) {
+        logToOutput(`LỖI_NGHIÊM_TRỌNG: ${data.msg}`, true);
+        alert("[LỖI HỆ THỐNG] " + data.msg);
+      });
+
+      // Xác nhận đã gửi tin nhắn thành công
+      socket.on("send_success", function (data) {
+        logToOutput(`GỬI_THÀNH_CÔNG: ${data.msg}`, true);
+        // Xóa ô nhập liệu sau khi gửi
+        document.getElementById("original-text").value = "";
+      });
+
+      // Xử lý khi nhận được tin nhắn văn bản từ đối tác
+      socket.on("receive_message", function (data) {
+        let authColor = data.auth_status.includes("✅")
+          ? "var(--term-green)"
+          : "var(--term-alert)";
+        let msgHtml = `> VĂN_BẢN_ĐÃ_GIẢI_MÃ : ${data.text}
+> MÃ_CHỮ_KÝ          : ${data.signature}
+> <span style="color: ${authColor}; font-weight: bold;">KẾT_QUẢ_XÁC_THỰC   : ${data.auth_status}</span>`;
+        logToOutput(msgHtml);
+      });
+
+      // Xử lý khi nhận được một tệp tin (File)
+      socket.on("receive_file", function (data) {
+        let authColor = data.auth_status.includes("✅")
+          ? "var(--term-green)"
+          : "var(--term-alert)";
+
+        // Chuyển đổi dữ liệu nhị phân thành đường dẫn có thể tải xuống được
+        const blob = new Blob([data.file]);
+        const url = window.URL.createObjectURL(blob);
+
+        let fileHtml = `> TỆP_ĐÃ_NHẬN        : ${data.name}
+> MÃ_CHỮ_KÝ          : ${data.signature}
+> <span style="color: ${authColor}; font-weight: bold;">KẾT_QUẢ_XÁC_THỰC   : ${data.auth_status}</span>
+> <a href="${url}" download="DA_GIAI_MA_${data.name}" style="color: var(--term-text); font-weight: bold; background: #333; padding: 2px 8px; text-decoration: none; display: inline-block; margin-top: 5px; border: 1px solid var(--term-text);">[ TẢI TỆP XUỐNG ]</a>`;
+        logToOutput(fileHtml);
+      });
+
+      // ----------------------------------------------------
+      // CÁC HÀM GỬI DỮ LIỆU LÊN SERVER
+      // ----------------------------------------------------
+
+      // Hàm gửi tin nhắn văn bản
+      function sendMessage() {
+        const text = document.getElementById("original-text").value;
+        const sig = document.getElementById("signature-text").value;
+
+        // Kiểm tra xem người dùng đã nhập đủ chưa
+        if (!text || !sig) {
+          alert(
+            "Vui lòng nhập đầy đủ Nội dung cần gửi và Định danh chữ ký RSA!",
+          );
+          return;
+        }
+
+        logToOutput("ĐANG THỰC THI QUY TRÌNH TRUYỀN TẢI...", true);
+        // Gửi lên server qua sự kiện 'send_message'
+        socket.emit("send_message", { text: text, signature: sig });
+      }
+
+      // Hàm đọc và gửi Tệp tin (File)
+      function sendFile() {
+        const fileInput = document.getElementById("file-input");
+        const sig = document.getElementById("signature-text").value;
+        const file = fileInput.files[0];
+
+        if (!file || !sig) {
+          alert("Vui lòng chọn Tệp tin và nhập Định danh chữ ký RSA!");
+          return;
+        }
+
+        // Sử dụng FileReader để đọc file dưới dạng nhị phân (ArrayBuffer)
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          logToOutput(`ĐANG MÃ HÓA TỆP: ${file.name}...`, true);
+          // Gửi dữ liệu file lên server qua sự kiện 'send_file'
+          socket.emit("send_file", {
+            file: e.target.result,
+            name: file.name,
+            signature: sig,
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    </script>
+  </body>
+</html>
